@@ -1,0 +1,13 @@
+**.[aiodS][aiodS]
+*.[iod]
+*.log
+*.out
+.gdb_history
+arc
+bin/hello
+bin/true
+core*
+fuck
+log/
+tags
+tst/tst

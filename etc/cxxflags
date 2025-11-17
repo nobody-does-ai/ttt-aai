@@ -1,0 +1,5 @@
+-O0
+-g3
+-ggdb
+-ggdb3
+-std=c++23

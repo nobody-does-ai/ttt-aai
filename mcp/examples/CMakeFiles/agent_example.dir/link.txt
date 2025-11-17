@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/agent_example.dir/agent_example.cpp.o -o agent_example  ../src/libmcp.a 

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/server_example.dir/server_example.cpp.o -o server_example  ../src/libmcp.a 

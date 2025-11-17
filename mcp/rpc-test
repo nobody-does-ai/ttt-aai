@@ -1,0 +1,39 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use JSON::RPC::Client;
+use Data::Dumper;
+
+# The URL of your JSON-RPC server endpoint
+my $server_url = 'http://localhost:8080/rpc';
+
+# The ID to be used for the RPC call
+my $request_id = 1;
+
+# 1. Create a new client object
+my $client = JSON::RPC::Client->new($server_url);
+
+# 2. Prepare the parameters for the remote method
+my $params = [42, 23];
+
+# 3. Make the remote call (method name is 'subtract')
+my $res = $client->call(
+    method => 'subtract',
+    params => $params,
+    id     => $request_id
+);
+
+# 4. Check the response and print the result
+if ($res->is_error) {
+    print "Error calling remote method:\n";
+    # Print the error code and message
+    print "Code: " . $res->error_code . "\n";
+    print "Message: " . $res->error_message . "\n";
+} else {
+    print "JSON-RPC Call Successful!\n";
+    print "Request ID: " . $res->id . "\n";
+    print "Result:\n";
+    # The result is the value returned by the server, which should be 19
+    print Dumper($res->result);
+}

@@ -1,0 +1,7 @@
+-Iinc
+-O0
+-fno-stack-protector
+-g
+-ggdb3
+-static
+-std=c++20

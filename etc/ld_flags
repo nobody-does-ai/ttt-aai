@@ -1,0 +1,5 @@
+-Llib
+-O0
+-g3
+-ggdb3
+-static

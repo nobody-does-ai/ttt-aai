@@ -1,0 +1,11 @@
+/home/NN/src/cpp-mcp/CMakeFiles/edit_cache.dir
+/home/NN/src/cpp-mcp/CMakeFiles/rebuild_cache.dir
+/home/NN/src/cpp-mcp/src/CMakeFiles/mcp.dir
+/home/NN/src/cpp-mcp/src/CMakeFiles/edit_cache.dir
+/home/NN/src/cpp-mcp/src/CMakeFiles/rebuild_cache.dir
+/home/NN/src/cpp-mcp/examples/CMakeFiles/sse_client_example.dir
+/home/NN/src/cpp-mcp/examples/CMakeFiles/stdio_client_example.dir
+/home/NN/src/cpp-mcp/examples/CMakeFiles/server_example.dir
+/home/NN/src/cpp-mcp/examples/CMakeFiles/agent_example.dir
+/home/NN/src/cpp-mcp/examples/CMakeFiles/edit_cache.dir
+/home/NN/src/cpp-mcp/examples/CMakeFiles/rebuild_cache.dir

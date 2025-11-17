@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/stdio_client_example.dir/stdio_client_example.cpp.o -o stdio_client_example  ../src/libmcp.a 
