@@ -1,4 +1,6 @@
 -Iinc
+-Imcp/include
+-Imcp/common
 -O0
 -g3
 -ggdb

@@ -86,13 +86,19 @@ namespace liboai {
 				@brief A pointer to the Completions component class that
 					provides access to its OpenAI API endpoints.
 			*/
-			std::unique_ptr<liboai::Completions> Completion;
+				std::unique_ptr<liboai::Completions> Completion;
 
-			/*
-				@brief A pointer to the Edits component class that
-					provides access to its OpenAI API endpoints.
-			*/
-			std::unique_ptr<liboai::Edits> Edit;
+				/*
+					@brief A pointer to the Responses component class that
+						provides access to its OpenAI API endpoints.
+				*/
+				std::unique_ptr<liboai::Responses> Responses;
+
+				/*
+					@brief A pointer to the Edits component class that
+						provides access to its OpenAI API endpoints.
+				*/
+				std::unique_ptr<liboai::Edits> Edit;
 
 			/*
 				@brief A pointer to the Embeddings component class that
