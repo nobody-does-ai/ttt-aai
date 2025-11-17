@@ -1,40 +1,162 @@
-#include "../include/components/completions.h"
+#include "../include/components/responses.h"
 
-liboai::Response liboai::Completions::create(const std::string& model_id, std::optional<std::string> prompt, std::optional<std::string> suffix, std::optional<uint16_t> max_tokens, std::optional<float> temperature, std::optional<float> top_p, std::optional<uint16_t> n, std::optional<std::function<bool(std::string, intptr_t)>> stream, std::optional<uint8_t> logprobs, std::optional<bool> echo, std::optional<std::vector<std::string>> stop, std::optional<float> presence_penalty, std::optional<float> frequency_penalty, std::optional<uint16_t> best_of, std::optional<std::unordered_map<std::string, int8_t>> logit_bias, std::optional<std::string> user) const & noexcept(false) {
+liboai::Response liboai::Responses::create(
+	const std::string& model,
+	const std::string& input,
+	std::optional<ResponsesConversation*> conversation,
+	std::optional<std::string> instructions,
+	std::optional<bool> store,
+	std::optional<float> temperature,
+	std::optional<float> top_p,
+	std::optional<uint32_t> max_tokens,
+	std::optional<float> presence_penalty,
+	std::optional<float> frequency_penalty,
+	std::optional<std::string> user
+) const & noexcept(false) {
 	liboai::JsonConstructor jcon;
-	jcon.push_back("model", model_id);
-	jcon.push_back("prompt", std::move(prompt));
-	jcon.push_back("suffix", std::move(suffix));
-	jcon.push_back("max_tokens", std::move(max_tokens));
-	jcon.push_back("temperature", std::move(temperature));
-	jcon.push_back("top_p", std::move(top_p));
-	jcon.push_back("n", std::move(n));
-	jcon.push_back("stream", stream);
-	jcon.push_back("logprobs", std::move(logprobs));
-	jcon.push_back("echo", std::move(echo));
-	jcon.push_back("stop", std::move(stop));
-	jcon.push_back("presence_penalty", std::move(presence_penalty));
-	jcon.push_back("frequency_penalty", std::move(frequency_penalty));
-	jcon.push_back("best_of", std::move(best_of));
-	jcon.push_back("logit_bias", std::move(logit_bias));
-	jcon.push_back("user", std::move(user));
+	jcon.push_back("model", model);
+	jcon.push_back("input", input);
 
+	// Add previous_response_id if conversation is provided and has one
+	if (conversation && conversation.value()->HasPreviousResponseId()) {
+		jcon.push_back("previous_response_id", conversation.value()->GetPreviousResponseId());
+	}
+
+	// Add optional parameters
+	if (instructions) {
+		jcon.push_back("instructions", instructions.value());
+	}
+	if (store.has_value()) {
+		jcon.push_back("store", store.value());
+	}
+	if (temperature) {
+		jcon.push_back("temperature", temperature.value());
+	}
+	if (top_p) {
+		jcon.push_back("top_p", top_p.value());
+	}
+	if (max_tokens) {
+		jcon.push_back("max_tokens", max_tokens.value());
+	}
+	if (presence_penalty) {
+		jcon.push_back("presence_penalty", presence_penalty.value());
+	}
+	if (frequency_penalty) {
+		jcon.push_back("frequency_penalty", frequency_penalty.value());
+	}
+	if (user) {
+		jcon.push_back("user", user.value());
+	}
+
+	// Make the API request to /responses endpoint
 	Response res;
 	res = this->Request(
-		Method::HTTP_POST, this->openai_root_, "/completions", "application/json",
+		Method::HTTP_POST, this->openai_root_, "/responses", "application/json",
 		this->auth_.GetAuthorizationHeaders(),
 		netimpl::components::Body {
 			jcon.dump()
 		},
-		stream ? netimpl::components::WriteCallback{std::move(stream.value())} : netimpl::components::WriteCallback{},
+		netimpl::components::WriteCallback{},  // No streaming support
 		this->auth_.GetProxies(),
 		this->auth_.GetProxyAuth(),
 		this->auth_.GetMaxTimeout()
 	);
 
+	// Auto-update conversation with response ID if conversation was provided
+	if (conversation && res) {
+		UpdateConversation(res, *conversation.value());
+	}
+
 	return res;
 }
 
-liboai::FutureResponse liboai::Completions::create_async(const std::string& model_id, std::optional<std::string> prompt, std::optional<std::string> suffix, std::optional<uint16_t> max_tokens, std::optional<float> temperature, std::optional<float> top_p, std::optional<uint16_t> n, std::optional<std::function<bool(std::string, intptr_t)>> stream, std::optional<uint8_t> logprobs, std::optional<bool> echo, std::optional<std::vector<std::string>> stop, std::optional<float> presence_penalty, std::optional<float> frequency_penalty, std::optional<uint16_t> best_of, std::optional<std::unordered_map<std::string, int8_t>> logit_bias, std::optional<std::string> user) const & noexcept(false) {
-	return std::async(std::launch::async, &liboai::Completions::create, this, model_id, prompt, suffix, max_tokens, temperature, top_p, n, stream, logprobs, echo, stop, presence_penalty, frequency_penalty, best_of, logit_bias, user);
+liboai::FutureResponse liboai::Responses::create_async(
+	const std::string& model,
+	const std::string& input,
+	std::optional<ResponsesConversation*> conversation,
+	std::optional<std::string> instructions,
+	std::optional<bool> store,
+	std::optional<float> temperature,
+	std::optional<float> top_p,
+	std::optional<uint32_t> max_tokens,
+	std::optional<float> presence_penalty,
+	std::optional<float> frequency_penalty,
+	std::optional<std::string> user
+) const & noexcept(false) {
+	return std::async(
+		std::launch::async,
+		&liboai::Responses::create,
+		this,
+		model,
+		input,
+		conversation,
+		instructions,
+		store,
+		temperature,
+		top_p,
+		max_tokens,
+		presence_penalty,
+		frequency_penalty,
+		user
+	);
+}
+
+std::string liboai::Responses::GetOutputText(const liboai::Response& response) noexcept {
+	try {
+		if (response && response.raw_json.contains("output")) {
+			const auto& output = response.raw_json["output"];
+			
+			// Iterate through output array to find message item
+			for (const auto& item : output) {
+				if (item.contains("type") && item["type"] == "message") {
+					if (item.contains("content") && item["content"].is_array()) {
+						// Find output_text in content array
+						for (const auto& content_item : item["content"]) {
+							if (content_item.contains("type") && content_item["type"] == "output_text") {
+								if (content_item.contains("text")) {
+									return content_item["text"].get<std::string>();
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	catch (...) {
+		// Return empty string on any error
+	}
+	
+	return "";
+}
+
+std::string liboai::Responses::GetResponseId(const liboai::Response& response) noexcept {
+	try {
+		if (response && response.raw_json.contains("id")) {
+			return response.raw_json["id"].get<std::string>();
+		}
+	}
+	catch (...) {
+		// Return empty string on any error
+	}
+	
+	return "";
+}
+
+bool liboai::Responses::UpdateConversation(
+	const liboai::Response& response,
+	ResponsesConversation& conversation
+) noexcept {
+	try {
+		std::string response_id = GetResponseId(response);
+		if (!response_id.empty()) {
+			conversation.SetPreviousResponseId(response_id);
+			return true;
+		}
+	}
+	catch (...) {
+		// Return false on any error
+	}
+	
+	return false;
 }

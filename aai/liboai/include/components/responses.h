@@ -1,169 +1,186 @@
 #pragma once
 
 /*
-	completions.h : Completions component class for OpenAI.
-		This class contains all the methods for the Completions component
-		of the OpenAI API. This class provides access to 'Completions' 
+	responses.h : Responses component class for OpenAI.
+		This class contains all the methods for the Responses component
+		of the OpenAI API. This class provides access to 'Responses' 
 		endpoints on the OpenAI API and should be accessed via the
 		liboai.h header file through an instantiated liboai::OpenAI
 		object after setting necessary authentication information
 		through the liboai::Authorization::Authorizer() singleton
 		object.
+		
+	The Responses API is OpenAI's new API primitive that provides:
+	- Server-side conversation state management
+	- Better caching (40-80% improvement)
+	- Simplified interface
+	- Future-proof design for upcoming models
 */
 
 #include "../core/authorization.h"
 #include "../core/response.h"
 
 namespace liboai {
-	class Completions final : private Network {
+	/*
+		@brief Class for managing Responses API conversations with server-side state.
+			Unlike Chat Completions which require manual conversation management,
+			Responses API can maintain state server-side via response IDs.
+	*/
+	class ResponsesConversation final {
 		public:
-			Completions(const std::string &root): Network(root) {}
-			NON_COPYABLE(Completions)
-			NON_MOVABLE(Completions)
-			~Completions() = default;
-			
-			using StreamCallback = std::function<bool(std::string, intptr_t)>;
+			ResponsesConversation() = default;
+			ResponsesConversation(const ResponsesConversation& other) = default;
+			ResponsesConversation(ResponsesConversation&& old) noexcept = default;
+			~ResponsesConversation() = default;
+
+			ResponsesConversation& operator=(const ResponsesConversation& other) = default;
+			ResponsesConversation& operator=(ResponsesConversation&& old) noexcept = default;
 
 			/*
-				@brief Given a prompt, the model will return one or more
-					predicted completions, and can also return the
-					probabilities of alternative tokens at each position.
+				@brief Set the previous response ID for conversation chaining.
+				
+				@param response_id  The ID from a previous response to continue from.
+			*/
+			void SetPreviousResponseId(std::string_view response_id) {
+				this->previous_response_id_ = response_id;
+			}
 
-				@param *model             The model to use for completion.
-				@param prompt             The prompt(s) to generate completions for.
-				@param suffix             The suffix that comes after a completion of inserted text.
-				@param max_tokens         The maximum number of tokens to generate in a completion.
-				@param temperature        The temperature for the model. Higher values will result in more
-											creative completions, while lower values will result in more
-											repetitive completions.
-				@param top_p              The top_p for the model. This is the probability mass that the
-											model will consider when making predictions. Lower values will
-										    result in more creative completions, while higher values will
-										    result in more repetitive completions.
-				@param n                  The number of completions to generate.
-				@param stream             Stream partial progress back to the client. A callback function
-											that is called each time new data is received from the API. If
-											no callback is supplied, this parameter is disabled and the
-											API will wait until the completion is finished before returning
-											the response.
-											
-				@param logprobs           The number of log probabilities to return for each token.
-				@param echo               Whether to include the prompt in the returned completion.
-				@param stop               A list of tokens that the model will stop generating completions
-											at. This can be a single token or a list of tokens.
-				@param presence_penalty   The presence penalty for the model. This is a number between
-											-2.0 and 2.0. Positive values penalize new tokens based on
-											whether they appear in the text so far, increasing the model's
-											likelihood to talk about new topics.
-				@param frequency_penalty  The frequency penalty for the model. This is a number between
-											-2.0 and 2.0. Positive values penalize new tokens based on
-											their existing frequency in the text so far, decreasing the
-											model's likelihood to repeat the same line verbatim.
-				@param best_of            Generates best_of completions server-side and returns the "best" 
-											one. When used with n, best_of controls the number of candidate
-											completions and n specifies how many to return � best_of must be
-											greater than n
+			/*
+				@brief Get the current previous response ID.
+				
+				@returns The previous response ID, or empty string if not set.
+			*/
+			std::string GetPreviousResponseId() const {
+				return this->previous_response_id_;
+			}
 
-											Because this parameter generates many completions, it can quickly
-											consume your token quota. Use carefully and ensure that you have
-											reasonable settings for max_tokens and stop.
-				@param logit_bias         Modify the likelihood of specified tokens appearing in the completion.
-											Accepts a json object that maps tokens (specified by their token ID
-											in the GPT tokenizer) to an associated bias value from -100 to 100. 
-				@param user               A unique identifier representing your end-user.
+			/*
+				@brief Clear the previous response ID (start a new conversation).
+			*/
+			void ClearPreviousResponseId() {
+				this->previous_response_id_.clear();
+			}
 
-				@returns A liboai::Response object containing the image(s)
-					data in JSON format.
+			/*
+				@brief Check if a previous response ID is set.
+				
+				@returns True if a previous response ID exists.
+			*/
+			bool HasPreviousResponseId() const {
+				return !this->previous_response_id_.empty();
+			}
+
+		private:
+			std::string previous_response_id_;
+	};
+
+	/*
+		@brief Class for interacting with the OpenAI Responses API.
+			The Responses API provides server-side conversation state management,
+			better caching, and built-in agentic capabilities.
+			
+		NO STREAMING SUPPORT - We only implement synchronous, blocking calls.
+		Streaming is theater. Fast is good. Instant is better.
+	*/
+	class Responses final : private Network {
+		public:
+			Responses(const std::string &root): Network(root) {}
+			NON_COPYABLE(Responses)
+			NON_MOVABLE(Responses)
+			~Responses() = default;
+
+			/*
+				@brief Creates a response from the model.
+				
+				@param *model             ID of the model to use (e.g., "gpt-4o", "gpt-5").
+				@param *input             The input to send to the model.
+				@param conversation       Optional ResponsesConversation object for chaining responses.
+				@param instructions       Optional system-level instructions for the model.
+				@param store              Whether to store the response server-side (default: true).
+				@param temperature        Sampling temperature between 0 and 2.
+				@param top_p              Nucleus sampling parameter.
+				@param max_tokens         Maximum number of tokens to generate.
+				@param presence_penalty   Penalty for token presence (-2.0 to 2.0).
+				@param frequency_penalty  Penalty for token frequency (-2.0 to 2.0).
+				@param user               Unique identifier for the end-user.
+				
+				@returns A Response object containing the API response.
 			*/
 			LIBOAI_EXPORT liboai::Response create(
-				const std::string& model_id,
-				std::optional<std::string> prompt = std::nullopt,
-				std::optional<std::string> suffix = std::nullopt,
-				std::optional<uint16_t> max_tokens = std::nullopt,
+				const std::string& model,
+				const std::string& input,
+				std::optional<ResponsesConversation*> conversation = std::nullopt,
+				std::optional<std::string> instructions = std::nullopt,
+				std::optional<bool> store = std::nullopt,
 				std::optional<float> temperature = std::nullopt,
 				std::optional<float> top_p = std::nullopt,
-				std::optional<uint16_t> n = std::nullopt,
-				std::optional<StreamCallback> stream = std::nullopt,
-				std::optional<uint8_t> logprobs = std::nullopt,
-				std::optional<bool> echo = std::nullopt,
-				std::optional<std::vector<std::string>> stop = std::nullopt,
+				std::optional<uint32_t> max_tokens = std::nullopt,
 				std::optional<float> presence_penalty = std::nullopt,
 				std::optional<float> frequency_penalty = std::nullopt,
-				std::optional<uint16_t> best_of = std::nullopt,
-				std::optional<std::unordered_map<std::string, int8_t>> logit_bias = std::nullopt,
 				std::optional<std::string> user = std::nullopt
 			) const & noexcept(false);
 
 			/*
-				@brief Given a prompt, the model will return one or more
-					predicted completions asynchronously, and can also
-					return the probabilities of alternative tokens at each
-					position.
-
-				@param *model             The model to use for completion.
-				@param prompt             The prompt(s) to generate completions for.
-				@param suffix             The suffix that comes after a completion of inserted text.
-				@param max_tokens         The maximum number of tokens to generate in a completion.
-				@param temperature        The temperature for the model. Higher values will result in more
-											creative completions, while lower values will result in more
-											repetitive completions.
-				@param top_p              The top_p for the model. This is the probability mass that the
-											model will consider when making predictions. Lower values will
-										    result in more creative completions, while higher values will
-										    result in more repetitive completions.
-				@param n                  The number of completions to generate.
-				@param stream             Stream partial progress back to the client. A callback function
-											that is called each time new data is received from the API. If
-											no callback is supplied, this parameter is disabled and the
-											API will wait until the completion is finished before returning
-											the response.
-											
-				@param logprobs           The number of log probabilities to return for each token.
-				@param echo               Whether to include the prompt in the returned completion.
-				@param stop               A list of tokens that the model will stop generating completions
-											at. This can be a single token or a list of tokens.
-				@param presence_penalty   The presence penalty for the model. This is a number between
-											-2.0 and 2.0. Positive values penalize new tokens based on
-											whether they appear in the text so far, increasing the model's
-											likelihood to talk about new topics.
-				@param frequency_penalty  The frequency penalty for the model. This is a number between
-											-2.0 and 2.0. Positive values penalize new tokens based on
-											their existing frequency in the text so far, decreasing the
-											model's likelihood to repeat the same line verbatim.
-				@param best_of            Generates best_of completions server-side and returns the "best" 
-											one. When used with n, best_of controls the number of candidate
-											completions and n specifies how many to return � best_of must be
-											greater than n
-
-											Because this parameter generates many completions, it can quickly
-											consume your token quota. Use carefully and ensure that you have
-											reasonable settings for max_tokens and stop.
-				@param logit_bias         Modify the likelihood of specified tokens appearing in the completion.
-											Accepts a json object that maps tokens (specified by their token ID
-											in the GPT tokenizer) to an associated bias value from -100 to 100. 
-				@param user               A unique identifier representing your end-user.
-
-				@returns A liboai::Response future containing the image(s)
-					data in JSON format.
+				@brief Asynchronously creates a response from the model.
+				
+				@param *model             ID of the model to use (e.g., "gpt-4o", "gpt-5").
+				@param *input             The input to send to the model.
+				@param conversation       Optional ResponsesConversation object for chaining responses.
+				@param instructions       Optional system-level instructions for the model.
+				@param store              Whether to store the response server-side (default: true).
+				@param temperature        Sampling temperature between 0 and 2.
+				@param top_p              Nucleus sampling parameter.
+				@param max_tokens         Maximum number of tokens to generate.
+				@param presence_penalty   Penalty for token presence (-2.0 to 2.0).
+				@param frequency_penalty  Penalty for token frequency (-2.0 to 2.0).
+				@param user               Unique identifier for the end-user.
+				
+				@returns A FutureResponse object for async access to the API response.
 			*/
 			LIBOAI_EXPORT liboai::FutureResponse create_async(
-				const std::string& model_id,
-				std::optional<std::string> prompt = std::nullopt,
-				std::optional<std::string> suffix = std::nullopt,
-				std::optional<uint16_t> max_tokens = std::nullopt,
+				const std::string& model,
+				const std::string& input,
+				std::optional<ResponsesConversation*> conversation = std::nullopt,
+				std::optional<std::string> instructions = std::nullopt,
+				std::optional<bool> store = std::nullopt,
 				std::optional<float> temperature = std::nullopt,
 				std::optional<float> top_p = std::nullopt,
-				std::optional<uint16_t> n = std::nullopt,
-				std::optional<StreamCallback> stream = std::nullopt,
-				std::optional<uint8_t> logprobs = std::nullopt,
-				std::optional<bool> echo = std::nullopt,
-				std::optional<std::vector<std::string>> stop = std::nullopt,
+				std::optional<uint32_t> max_tokens = std::nullopt,
 				std::optional<float> presence_penalty = std::nullopt,
 				std::optional<float> frequency_penalty = std::nullopt,
-				std::optional<uint16_t> best_of = std::nullopt,
-				std::optional<std::unordered_map<std::string, int8_t>> logit_bias = std::nullopt,
 				std::optional<std::string> user = std::nullopt
 			) const & noexcept(false);
+
+			/*
+				@brief Helper function to extract output_text from a Responses API response.
+				
+				@param response  The Response object from create() or create_async().
+				
+				@returns The text content from the response, or empty string if not found.
+			*/
+			LIBOAI_EXPORT static std::string GetOutputText(const liboai::Response& response) noexcept;
+
+			/*
+				@brief Helper function to extract the response ID from a Responses API response.
+				
+				@param response  The Response object from create() or create_async().
+				
+				@returns The response ID, or empty string if not found.
+			*/
+			LIBOAI_EXPORT static std::string GetResponseId(const liboai::Response& response) noexcept;
+
+			/*
+				@brief Helper function to update a conversation with the response ID.
+				
+				@param response      The Response object from create() or create_async().
+				@param conversation  The ResponsesConversation object to update.
+				
+				@returns True if the response ID was successfully extracted and set.
+			*/
+			LIBOAI_EXPORT static bool UpdateConversation(
+				const liboai::Response& response,
+				ResponsesConversation& conversation
+			) noexcept;
 
 		private:
 			Authorization& auth_ = Authorization::Authorizer();
